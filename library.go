@@ -2,15 +2,17 @@ package Library_blockchain
 
 import (
 	"crypto/md5"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/hyperledger/fabric-contract-api-go/contractapi"
+	"github.com/hyperledger/fabric-chaincode-go/shim"
+	"github.com/hyperledger/fabric-protos-go/peer"
+	"log"
 	"strings"
 )
 
-// Book describes basic details of what a book object contains
 type Book struct {
 	ID          string `json:"ID"`
 	Name        string `json:"name"`
@@ -23,13 +25,10 @@ type Book struct {
 	BookKey     string `json:"bookKey"`
 }
 
-// SmartContract provides functions for managing a library
 type SmartContract struct {
-	contractapi.Contract
 }
 
-// InitLedger adds a base set of books to the ledger
-func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
+func (s *SmartContract) InitLedger(stub shim.ChaincodeStubInterface) error {
 	books := []Book{
 		{ID: "B1", Name: "Book1", Author: "Author1", ISBN: "111-1111111111", Description: "This is book 1", Publisher: "p1", Available: true},
 		{ID: "B2", Name: "Book2", Author: "Author2", ISBN: "222-2222222222", Description: "This is book 2", Publisher: "P1", Available: true},
@@ -46,7 +45,7 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
 			return err
 		}
 
-		err = ctx.GetStub().PutState(book.ID, bookJSON)
+		err = stub.PutState(book.ID, bookJSON)
 		if err != nil {
 			return fmt.Errorf("failed to put to world state. %v", err)
 		}
@@ -54,30 +53,81 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
 	return nil
 }
 
+func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
+	function, args := stub.GetFunctionAndParameters()
+
+	if function == "borrowBook" {
+		// 借书方法
+		if len(args) != 2 {
+			return shim.Error("Incorrect number of arguments. Expecting 2: book ID and borrower")
+		}
+		err := s.borrowBook(stub, args[0], args[1])
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		return shim.Success(nil)
+	} else if function == "returnBook" {
+		// 还书方法
+		if len(args) != 1 {
+			return shim.Error("Incorrect number of arguments. Expecting 1: book ID")
+		}
+		err := s.returnBook(stub, args[0])
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		return shim.Success(nil)
+	} else if function == "addBook" {
+		// 添加书籍方法
+		if len(args) != 5 {
+			return shim.Error("Incorrect number of arguments. Expecting 5: book name, author, publisher, ISBN, description")
+		}
+		err := s.addBook(stub, args[0], args[1], args[2], args[3], args[4])
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		return shim.Success(nil)
+	} else if function == "QueryBooksByPattern" {
+		// 模糊查询方法
+		if len(args) != 1 {
+			return shim.Error("Incorrect number of arguments. Expecting 1: book pattern")
+		}
+		books, err := s.QueryBooksByPattern(stub, args[0])
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		bookJSON, err := json.Marshal(books)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		return shim.Success(bookJSON)
+	} else {
+		return shim.Error("Invalid function name.")
+	}
+}
+
 // 借书方法
-func (l *SmartContract) borrowBook(ctx contractapi.TransactionContextInterface, bookID string, borrower string) error {
-	book, err := l.GetBook(ctx, bookID)
+func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID string, borrower string) error {
+	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
 	}
-
 	if book.Borrower != "" {
 		return fmt.Errorf("book %s is already borrowed", bookID)
 	}
 
 	book.Borrower = borrower
 	book.Available = false
-	err = l.UpdateBook(ctx, book)
+	err = s.UpdateBook(stub, book)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update book %s: %v", bookID, err)
 	}
 
 	return nil
 }
 
 // 还书方法
-func (l *SmartContract) returnBook(ctx contractapi.TransactionContextInterface, bookID string) error {
-	book, err := l.GetBook(ctx, bookID)
+func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID string) error {
+	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
 	}
@@ -88,7 +138,7 @@ func (l *SmartContract) returnBook(ctx contractapi.TransactionContextInterface, 
 
 	book.Borrower = ""
 	book.Available = true
-	err = l.UpdateBook(ctx, book)
+	err = s.UpdateBook(stub, book)
 	if err != nil {
 		return err
 	}
@@ -97,9 +147,9 @@ func (l *SmartContract) returnBook(ctx contractapi.TransactionContextInterface, 
 }
 
 // 根据书名、作者、出版社、ISBN等信息增加书籍
-func (s *SmartContract) addBook(ctx contractapi.TransactionContextInterface, bookName string, author string, publisher string, isbn string, Description string) error {
+func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, bookName string, author string, publisher string, isbn string, Description string) error {
 	// 检查调用合约的账户是否有添加图书的权限
-	err := s.checkCallerAuthorization(ctx)
+	err := s.checkCallerAuthorization(stub)
 	if err != nil {
 		return err
 	}
@@ -114,8 +164,8 @@ func (s *SmartContract) addBook(ctx contractapi.TransactionContextInterface, boo
 
 	bookKey := s.generateBookKey(book)
 
-	// 检查图书是否已经存在
-	books, err := s.QueryBooksByPattern(ctx, bookKey)
+	// 根据bookKey检查图书是否已经存在
+	books, err := s.QueryBooksByPattern(stub, bookKey)
 
 	if len(books) != 0 {
 		return fmt.Errorf("the book already exists with book key: %s", bookKey)
@@ -132,7 +182,7 @@ func (s *SmartContract) addBook(ctx contractapi.TransactionContextInterface, boo
 	if err != nil {
 		return err
 	}
-	err = ctx.GetStub().PutState(id, bookJSON)
+	err = stub.PutState(book.ID, bookJSON)
 	if err != nil {
 		return fmt.Errorf("failed to put book to world state: %v", err)
 	}
@@ -140,32 +190,32 @@ func (s *SmartContract) addBook(ctx contractapi.TransactionContextInterface, boo
 	return nil
 }
 
-func (s *SmartContract) QueryBooksByPattern(ctx contractapi.TransactionContextInterface, pattern string) ([]*Book, error) {
-	// Create an empty slice to store the query results
+func (s *SmartContract) QueryBooksByPattern(stub shim.ChaincodeStubInterface, pattern string) ([]*Book, error) {
+
 	var results []*Book
 
-	// Get an iterator over all books in the state database
-	iterator, err := ctx.GetStub().GetStateByRange("", "")
+	iterator, err := stub.GetStateByRange("", "")
 	if err != nil {
 		return nil, err
 	}
-	//defer iterator.Close()
+	defer func() {
+		if err := iterator.Close(); err != nil {
+			log.Printf("Failed to close iterator: %s", err)
+		}
+	}()
 
-	// Loop through all books and add any that match the pattern to the results slice
 	for iterator.HasNext() {
 		bookBytes, err := iterator.Next()
 		if err != nil {
 			return nil, err
 		}
 
-		// Deserialize the book object from the state database
 		var book Book
 		err = json.Unmarshal(bookBytes.Value, &book)
 		if err != nil {
 			return nil, err
 		}
 
-		// Check if any book field matches the pattern
 		if strings.Contains(book.Name, pattern) ||
 			strings.Contains(book.Author, pattern) ||
 			strings.Contains(book.Publisher, pattern) ||
@@ -173,7 +223,6 @@ func (s *SmartContract) QueryBooksByPattern(ctx contractapi.TransactionContextIn
 			strings.Contains(book.ID, pattern) ||
 			strings.Contains(book.BookKey, pattern) {
 
-			// Add the book to the results slice
 			results = append(results, &book)
 		}
 	}
@@ -181,14 +230,16 @@ func (s *SmartContract) QueryBooksByPattern(ctx contractapi.TransactionContextIn
 	return results, nil
 }
 
-func (s *SmartContract) GetBook(ctx contractapi.TransactionContextInterface, bookID string) (*Book, error) {
-	bookBytes, err := ctx.GetStub().GetState(bookID)
+// 根据id获取图书
+func (s *SmartContract) GetBook(stub shim.ChaincodeStubInterface, bookID string) (*Book, error) {
+	bookBytes, err := stub.GetState(bookID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read from world state: %v", err)
 	}
 	if bookBytes == nil {
 		return nil, fmt.Errorf("book %s does not exist", bookID)
 	}
+
 	var book Book
 	err = json.Unmarshal(bookBytes, &book)
 	if err != nil {
@@ -197,8 +248,9 @@ func (s *SmartContract) GetBook(ctx contractapi.TransactionContextInterface, boo
 	return &book, nil
 }
 
-func (s *SmartContract) UpdateBook(ctx contractapi.TransactionContextInterface, book *Book) error {
-	existingBook, err := s.GetBook(ctx, book.ID)
+// 根据一个book实例更新图书
+func (s *SmartContract) UpdateBook(stub shim.ChaincodeStubInterface, book *Book) error {
+	existingBook, err := s.GetBook(stub, book.ID)
 	if err != nil {
 		return err
 	}
@@ -217,7 +269,7 @@ func (s *SmartContract) UpdateBook(ctx contractapi.TransactionContextInterface, 
 		return err
 	}
 
-	err = ctx.GetStub().PutState(book.ID, bookBytes)
+	err = stub.PutState(book.ID, bookBytes)
 	if err != nil {
 		return fmt.Errorf("failed to update book %s: %v", book.ID, err)
 	}
@@ -225,16 +277,26 @@ func (s *SmartContract) UpdateBook(ctx contractapi.TransactionContextInterface, 
 	return nil
 }
 
-func (s *SmartContract) checkCallerAuthorization(ctx contractapi.TransactionContextInterface) error {
-
-	err := ctx.GetClientIdentity().AssertAttributeValue("username", "admin")
+// 检查提交者用户名是否为admin
+func (s *SmartContract) checkCallerAuthorization(stub shim.ChaincodeStubInterface) error {
+	certificate, err := stub.GetCreator()
 	if err != nil {
-		return fmt.Errorf("failed to get MSP ID of client: %v", err)
+		return fmt.Errorf("failed to get certificate of client: %v", err)
+	}
+
+	cert, err := x509.ParseCertificate(certificate)
+	if err != nil {
+		return fmt.Errorf("failed to parse client certificate: %v", err)
+	}
+
+	if cert.Subject.CommonName != "admin" {
+		return fmt.Errorf("caller is not authorized")
 	}
 
 	return nil
 }
 
+// 根据book实例的书名、作者、出版社、ISBN号生成一个BookKey
 func (s *SmartContract) generateBookKey(book *Book) string {
 	data := []byte(fmt.Sprintf("%s|%s|%s|%s", book.Name, book.Author, book.Publisher, book.ISBN))
 	hash := md5.Sum(data)
