@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
-	"github.com/hyperledger/fabric-samples/asset-transfer-basic/chaincode-go/chaincode"
+	"github.com/yunlong-le/library/chaincode"
 )
 
 func main() {
