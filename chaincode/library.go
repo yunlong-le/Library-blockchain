@@ -1,5 +1,6 @@
-package Library_blockchain
+package chaincode
 
+/*
 import (
 	"crypto/md5"
 	"crypto/x509"
@@ -13,6 +14,9 @@ import (
 	"strings"
 )
 
+type SmartContract struct {
+}
+
 type Book struct {
 	ID          string `json:"ID"`
 	Name        string `json:"name"`
@@ -25,10 +29,7 @@ type Book struct {
 	BookKey     string `json:"bookKey"`
 }
 
-type SmartContract struct {
-}
-
-func (s *SmartContract) InitLedger(stub shim.ChaincodeStubInterface) error {
+func (s *SmartContract) Init(stub shim.ChaincodeStubInterface) peer.Response {
 	books := []Book{
 		{ID: "B1", Name: "Book1", Author: "Author1", ISBN: "111-1111111111", Description: "This is book 1", Publisher: "p1", Available: true},
 		{ID: "B2", Name: "Book2", Author: "Author2", ISBN: "222-2222222222", Description: "This is book 2", Publisher: "P1", Available: true},
@@ -42,15 +43,15 @@ func (s *SmartContract) InitLedger(stub shim.ChaincodeStubInterface) error {
 		book.BookKey = bookKey
 		bookJSON, err := json.Marshal(book)
 		if err != nil {
-			return err
+			return shim.Error("Marshal failed")
 		}
 
 		err = stub.PutState(book.ID, bookJSON)
 		if err != nil {
-			return fmt.Errorf("failed to put to world state. %v", err)
+			return shim.Error("failed to put to world state. %v")
 		}
 	}
-	return nil
+	return shim.Success(nil)
 }
 
 func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
@@ -302,3 +303,4 @@ func (s *SmartContract) generateBookKey(book *Book) string {
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:])
 }
+*/
