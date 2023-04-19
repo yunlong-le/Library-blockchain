@@ -146,7 +146,7 @@ func (s *SmartContract) BookExists(ctx contractapi.TransactionContextInterface, 
 }
 
 // TransferBook updates the owner field of book with given id in world state.
-func (s *SmartContract) borrowBook(ctx contractapi.TransactionContextInterface, id string, borrower string) error {
+func (s *SmartContract) BorrowBook(ctx contractapi.TransactionContextInterface, id string, borrower string) error {
 	book, err := s.ReadBook(ctx, id)
 	if err != nil {
 		return err

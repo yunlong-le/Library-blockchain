@@ -8,9 +8,9 @@ import (
 	"github.com/hyperledger/fabric-chaincode-go/shim"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 	"github.com/hyperledger/fabric-protos-go/ledger/queryresult"
-	"github.com/hyperledger/fabric-samples/asset-transfer-basic/chaincode-go/chaincode"
 	"github.com/hyperledger/fabric-samples/asset-transfer-basic/chaincode-go/chaincode/mocks"
 	"github.com/stretchr/testify/require"
+	"github.com/yunlong-le/library/chaincode"
 )
 
 //go:generate counterfeiter -o mocks/transaction.go -fake-name TransactionContext . transactionContext
