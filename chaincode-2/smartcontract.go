@@ -11,6 +11,7 @@ import (
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"log"
 	"strings"
+	"time"
 )
 
 type SmartContract struct {
@@ -26,6 +27,13 @@ type Book struct {
 	Borrower    string `json:"borrower"`
 	Publisher   string `json:"publisher"`
 	BookKey     string `json:"bookKey"`
+}
+
+type Record struct {
+	BookID      string `json:"bookID"`
+	Borrower    string `json:"borrower"`
+	LendingTime int64  `json:"lendingTime"`
+	ReturnTime  int64  `json:"returnTime"`
 }
 
 func (s *SmartContract) Init(stub shim.ChaincodeStubInterface) peer.Response {
@@ -107,6 +115,11 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 
 // 借书方法
 func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID string, borrower string) error {
+	// 检查调用合约的账户是否有权限
+	err := s.checkCallerAuthorization(stub)
+	if err != nil {
+		return err
+	}
 	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
@@ -117,6 +130,10 @@ func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID stri
 
 	book.Borrower = borrower
 	book.Available = false
+	record := Record{BookID: bookID, Borrower: borrower, LendingTime: getCurrentTime(), ReturnTime: 0}
+	if err := s.RecordTransaction(stub, record); err != nil {
+		return err
+	}
 	err = s.UpdateBook(stub, book)
 	if err != nil {
 		return fmt.Errorf("failed to update book %s: %v", bookID, err)
@@ -127,6 +144,11 @@ func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID stri
 
 // 还书方法
 func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID string) error {
+	// 检查调用合约的账户是否有权限
+	err := s.checkCallerAuthorization(stub)
+	if err != nil {
+		return err
+	}
 	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
@@ -138,6 +160,10 @@ func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID stri
 
 	book.Borrower = ""
 	book.Available = true
+	record := Record{BookID: bookID, ReturnTime: getCurrentTime()}
+	if err := s.RecordTransaction(stub, record); err != nil {
+		return err
+	}
 	err = s.UpdateBook(stub, book)
 	if err != nil {
 		return err
@@ -148,7 +174,7 @@ func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID stri
 
 // 根据书名、作者、出版社、ISBN等信息增加书籍
 func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, bookName string, author string, publisher string, isbn string, Description string) error {
-	// 检查调用合约的账户是否有添加图书的权限
+	// 检查调用合约的账户是否有权限
 	err := s.checkCallerAuthorization(stub)
 	if err != nil {
 		return err
@@ -230,6 +256,49 @@ func (s *SmartContract) QueryBooksByPattern(stub shim.ChaincodeStubInterface, pa
 	return results, nil
 }
 
+// 记录借还书信息
+func (s *SmartContract) RecordTransaction(stub shim.ChaincodeStubInterface, record Record) error {
+	recordBytes, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("failed to marshal record: %v", err)
+	}
+
+	key := "record-" + record.BookID
+	if record.ReturnTime == 0 {
+		// Record lending of the book
+		if err := stub.PutState(key, recordBytes); err != nil {
+			return fmt.Errorf("failed to put record state: %v", err)
+		}
+	} else {
+		// Record return of the book
+		recordValue, err := stub.GetState(key)
+		if err != nil {
+			return fmt.Errorf("failed to get record state: %v", err)
+		}
+		if recordValue == nil {
+			return fmt.Errorf("record not found for book ID: %s", record.BookID)
+		}
+
+		var existingRecord Record
+		if err := json.Unmarshal(recordValue, &existingRecord); err != nil {
+			return fmt.Errorf("failed to unmarshal existing record: %v", err)
+		}
+
+		existingRecord.ReturnTime = record.ReturnTime
+
+		existingRecordBytes, err := json.Marshal(existingRecord)
+		if err != nil {
+			return fmt.Errorf("failed to marshal existing record: %v", err)
+		}
+
+		if err := stub.PutState(key, existingRecordBytes); err != nil {
+			return fmt.Errorf("failed to put existing record state: %v", err)
+		}
+	}
+
+	return nil
+}
+
 // 根据id获取图书
 func (s *SmartContract) GetBook(stub shim.ChaincodeStubInterface, bookID string) (*Book, error) {
 	bookBytes, err := stub.GetState(bookID)
@@ -301,4 +370,8 @@ func (s *SmartContract) generateBookKey(book *Book) string {
 	data := []byte(fmt.Sprintf("%s|%s|%s|%s", book.Name, book.Author, book.Publisher, book.ISBN))
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:])
+}
+
+func getCurrentTime() int64 {
+	return time.Now().Unix()
 }
