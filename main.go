@@ -1,19 +1,15 @@
 package library
 
 import (
-	"log"
+	"fmt"
 
-	"github.com/hyperledger/fabric-contract-api-go/contractapi"
-	"github.com/yunlong-le/library/chaincode"
+	"github.com/hyperledger/fabric-chaincode-go/shim"
+	"github.com/yunlong-le/library/chaincode-2"
 )
 
 func main() {
-	assetChaincode, err := contractapi.NewChaincode(&chaincode.SmartContract{})
+	err := shim.Start(new(chaincode.SmartContract))
 	if err != nil {
-		log.Panicf("Error creating library chaincode: %v", err)
-	}
-
-	if err := assetChaincode.Start(); err != nil {
-		log.Panicf("Error starting library chaincode: %v", err)
+		fmt.Printf("Error starting Simple chaincode: %s", err)
 	}
 }
