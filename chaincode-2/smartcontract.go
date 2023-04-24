@@ -2,7 +2,6 @@ package chaincode
 
 import (
 	"crypto/md5"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -115,11 +114,6 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 
 // 借书方法
 func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID string, borrower string) error {
-	// 检查调用合约的账户是否有权限
-	err := s.checkCallerAuthorization(stub)
-	if err != nil {
-		return err
-	}
 	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
@@ -144,11 +138,6 @@ func (s *SmartContract) borrowBook(stub shim.ChaincodeStubInterface, bookID stri
 
 // 还书方法
 func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID string) error {
-	// 检查调用合约的账户是否有权限
-	err := s.checkCallerAuthorization(stub)
-	if err != nil {
-		return err
-	}
 	book, err := s.GetBook(stub, bookID)
 	if err != nil {
 		return fmt.Errorf("failed to get book %s: %v", bookID, err)
@@ -174,12 +163,6 @@ func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID stri
 
 // 根据书名、作者、出版社、ISBN等信息增加书籍
 func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, bookName string, author string, publisher string, isbn string, Description string) error {
-	// 检查调用合约的账户是否有权限
-	err := s.checkCallerAuthorization(stub)
-	if err != nil {
-		return err
-	}
-
 	// 创建图书对象
 	book := &Book{
 		Name:      bookName,
@@ -341,25 +324,6 @@ func (s *SmartContract) UpdateBook(stub shim.ChaincodeStubInterface, book *Book)
 	err = stub.PutState(book.ID, bookBytes)
 	if err != nil {
 		return fmt.Errorf("failed to update book %s: %v", book.ID, err)
-	}
-
-	return nil
-}
-
-// 检查提交者用户名是否为admin
-func (s *SmartContract) checkCallerAuthorization(stub shim.ChaincodeStubInterface) error {
-	certificate, err := stub.GetCreator()
-	if err != nil {
-		return fmt.Errorf("failed to get certificate of client: %v", err)
-	}
-
-	cert, err := x509.ParseCertificate(certificate)
-	if err != nil {
-		return fmt.Errorf("failed to parse client certificate: %v", err)
-	}
-
-	if cert.Subject.CommonName != "admin" {
-		return fmt.Errorf("caller is not authorized")
 	}
 
 	return nil
