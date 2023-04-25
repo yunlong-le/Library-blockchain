@@ -107,6 +107,19 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 			return shim.Error(err.Error())
 		}
 		return shim.Success(bookJSON)
+	} else if function == "GetAllBooks" {
+		// 查询全部方法
+		books, err := s.GetAllBooks(stub)
+		if err != nil {
+			return shim.Error(fmt.Sprintf("failed to get all books: %v", err))
+		}
+
+		booksJSON, err := json.Marshal(books)
+		if err != nil {
+			return shim.Error(fmt.Sprintf("failed to marshal books: %v", err))
+		}
+
+		return shim.Success(booksJSON)
 	} else {
 		return shim.Error("Invalid function name.")
 	}
@@ -339,4 +352,28 @@ func (s *SmartContract) generateBookKey(book *Book) string {
 
 func getCurrentTime() int64 {
 	return time.Now().Unix()
+}
+
+func (s *SmartContract) GetAllBooks(stub shim.ChaincodeStubInterface) ([]*Book, error) {
+	var books []*Book
+	bookIterator, err := stub.GetStateByRange("", "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all books: %v", err)
+	}
+	defer bookIterator.Close()
+
+	for bookIterator.HasNext() {
+		bookResponse, err := bookIterator.Next()
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate through books: %v", err)
+		}
+
+		var book Book
+		err = json.Unmarshal(bookResponse.Value, &book)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal book: %v", err)
+		}
+		books = append(books, &book)
+	}
+	return books, nil
 }
