@@ -119,6 +119,19 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 		}
 
 		return shim.Success(booksJSON)
+	} else if function == "GetAllRecords" {
+		// 查询全部方法
+		records, err := s.GetAllRecords(stub)
+		if err != nil {
+			return shim.Error(fmt.Sprintf("failed to get all records: %v", err))
+		}
+
+		recordsJSON, err := json.Marshal(records)
+		if err != nil {
+			return shim.Error(fmt.Sprintf("failed to marshal records: %v", err))
+		}
+
+		return shim.Success(recordsJSON)
 	} else {
 		return shim.Error("Invalid function name.")
 	}
@@ -376,4 +389,28 @@ func (s *SmartContract) GetAllBooks(stub shim.ChaincodeStubInterface) ([]*Book, 
 		books = append(books, &book)
 	}
 	return books, nil
+}
+
+func (s *SmartContract) GetAllRecords(stub shim.ChaincodeStubInterface) ([]*Record, error) {
+	var records []*Record
+	recordIterator, err := stub.GetStateByRange("", "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all records: %v", err)
+	}
+	defer recordIterator.Close()
+
+	for recordIterator.HasNext() {
+		recordResponse, err := recordIterator.Next()
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate through records: %v", err)
+		}
+
+		var record Record
+		err = json.Unmarshal(recordResponse.Value, &record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal record: %v", err)
+		}
+		records = append(records, &record)
+	}
+	return records, nil
 }
