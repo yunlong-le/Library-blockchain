@@ -306,7 +306,7 @@ func (s *SmartContract) UpdateBook(stub shim.ChaincodeStubInterface, book *Book)
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("existingBook before update: %v\n", existingBook)
 	existingBook.Available = book.Available
 	existingBook.Name = book.Name
 	existingBook.Author = book.Author
@@ -325,6 +325,7 @@ func (s *SmartContract) UpdateBook(stub shim.ChaincodeStubInterface, book *Book)
 	if err != nil {
 		return fmt.Errorf("failed to update book %s: %v", book.ID, err)
 	}
+	fmt.Printf("existingBook after update: %v\n", existingBook)
 
 	return nil
 }
