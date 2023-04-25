@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/hyperledger/fabric-chaincode-go/shim"
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"log"
@@ -85,10 +84,10 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 		return shim.Success(nil)
 	} else if function == "addBook" {
 		// 添加书籍方法
-		if len(args) != 5 {
+		if len(args) != 6 {
 			return shim.Error("Incorrect number of arguments. Expecting 5: book name, author, publisher, ISBN, description")
 		}
-		err := s.addBook(stub, args[0], args[1], args[2], args[3], args[4])
+		err := s.addBook(stub, args[0], args[1], args[2], args[3], args[4], args[5])
 		if err != nil {
 			return shim.Error(err.Error())
 		}
@@ -175,7 +174,7 @@ func (s *SmartContract) returnBook(stub shim.ChaincodeStubInterface, bookID stri
 }
 
 // 根据书名、作者、出版社、ISBN等信息增加书籍
-func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, bookName string, author string, publisher string, isbn string, Description string) error {
+func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, id string, bookName string, author string, publisher string, isbn string, Description string) error {
 	// 创建图书对象
 	book := &Book{
 		Name:      bookName,
@@ -197,7 +196,8 @@ func (s *SmartContract) addBook(stub shim.ChaincodeStubInterface, bookName strin
 	book.Borrower = ""
 	book.Available = true
 	book.Description = Description
-	id := uuid.New().String()
+	//!!! 一个值得牢记的错误
+	//id := uuid.New().String()
 	book.ID = id
 
 	bookJSON, err := json.Marshal(book)
