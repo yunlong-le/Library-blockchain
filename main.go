@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -15,35 +14,20 @@ type serverConfig struct {
 }
 
 func main() {
-	log.Println("------------------------------------------------------------main start------------------------------------------------------------: %v\n")
-	fmt.Printf("------------------------------------------------------------main start------------------------------------------------------------: %v\n")
-	mode := os.Getenv("MODE")
-	fmt.Printf("----------------------------------------get MODE: %v\n", mode)
-	if mode == "chaincode" {
-		err := shim.Start(new(chaincode.SmartContract))
-		if err != nil {
-			fmt.Printf("-----------------------------------Error starting Simple chaincode: %s", err)
-		}
-	} else if mode == "external" {
-		// External mode startup logic
-		config := serverConfig{
-			CCID:    os.Getenv("CHAINCODE_ID"),
-			Address: os.Getenv("CHAINCODE_SERVER_ADDRESS"),
-		}
-		//chaincode, err := contractapi.NewChaincode(&SmartContract{})
-		cc := new(chaincode.SmartContract)
-		server := &shim.ChaincodeServer{
-			CCID:    config.CCID,
-			Address: config.Address,
-			CC:      cc,
-			TLSProps: shim.TLSProperties{
-				Disabled: true,
-			},
-		}
-		if err := server.Start(); err != nil {
-			log.Panicf("Error starting asset-transfer-basic chaincode: %s", err.Error())
-		}
-	} else {
-		log.Panic("---------------------------------------Invalid mode specified")
+	config := serverConfig{
+		CCID:    os.Getenv("CHAINCODE_ID"),
+		Address: os.Getenv("CHAINCODE_SERVER_ADDRESS"),
+	}
+	cc := new(chaincode.SmartContract)
+	server := &shim.ChaincodeServer{
+		CCID:    config.CCID,
+		Address: config.Address,
+		CC:      cc,
+		TLSProps: shim.TLSProperties{
+			Disabled: true,
+		},
+	}
+	if err := server.Start(); err != nil {
+		log.Panicf("Error starting asset-transfer-basic chaincode: %s", err.Error())
 	}
 }
